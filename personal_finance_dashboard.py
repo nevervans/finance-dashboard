@@ -21,8 +21,18 @@ def get_stock_price(ticker: str) -> float:
 
 @st.cache_data(ttl=1800)
 def get_news(ticker: str) -> List[Dict]:
-    url = f"https://newsapi.org/v2/everything?q={ticker}&apiKey={NEWS_API_KEY}&sortBy=publishedAt&pageSize=5"
+    query_map = {
+        "AAPL": "Apple Inc",
+        "TSLA": "Tesla",
+        "GOOGL": "Google OR Alphabet",
+        "MSFT": "Microsoft",
+        "META": "Meta OR Facebook"
+    }
+    query = query_map.get(ticker.upper(), ticker)
+    
+    url = f"https://newsapi.org/v2/everything?q={query}&language=en&sortBy=publishedAt&pageSize=5&apiKey={NEWS_API_KEY}"
     r = requests.get(url).json()
+    
     return r.get("articles", [])
 
 def summarize_news(text: str) -> str:
@@ -71,6 +81,7 @@ def main():
         for ticker in df['Ticker']:
             st.markdown(f"### {ticker}")
             news_items = get_news(ticker)
+            st.json(news_items)
             if not news_items:
                 st.write("No recent news found.")
             for item in news_items:
