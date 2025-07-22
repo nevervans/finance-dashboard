@@ -21,8 +21,18 @@ def get_stock_price(ticker: str) -> float:
 
 @st.cache_data(ttl=1800)
 def get_news(ticker: str) -> List[Dict]:
-    url = f"https://newsapi.org/v2/everything?q={ticker}&apiKey={NEWS_API_KEY}&sortBy=publishedAt&pageSize=5"
+    query_map = {
+        "AAPL": "Apple Inc",
+        "TSLA": "Tesla",
+        "GOOGL": "Google OR Alphabet",
+        "MSFT": "Microsoft",
+        "META": "Meta OR Facebook"
+    }
+    query = query_map.get(ticker.upper(), ticker)
+    
+    url = f"https://newsapi.org/v2/everything?q={query}&language=en&sortBy=publishedAt&pageSize=5&apiKey={NEWS_API_KEY}"
     r = requests.get(url).json()
+    
     return r.get("articles", [])
 
 def summarize_news(text: str) -> str:
@@ -30,7 +40,7 @@ def summarize_news(text: str) -> str:
         response = openai.ChatCompletion.create(
             model="gpt-3.5-turbo",
             messages=[
-                {"role": "system", "content": "Summarize this news in 2 sentences and highlight its potential market impact (magnitude and direction)."},
+                {"role": "system", "content": "Summarize the news in 2 lines. Then say whether the sentiment is Positive, Negative, or Neutral from an investor's point of view."},
                 {"role": "user", "content": text},
             ],
         )
@@ -40,6 +50,20 @@ def summarize_news(text: str) -> str:
 
 def load_csv(file) -> pd.DataFrame:
     df = pd.read_csv(file)
+    return df
+
+@st.cache_data(ttl=3600)
+def get_historical_prices(ticker: str) -> pd.DataFrame:
+    url = f"https://www.alphavantage.co/query?function=TIME_SERIES_DAILY&symbol={ticker}&outputsize=compact&apikey={ALPHA_VANTAGE_API_KEY}"
+    r = requests.get(url).json()
+    time_series = r.get("Time Series (Daily)", {})
+    data = []
+    for date_str, values in sorted(time_series.items()):
+        data.append({
+            "Date": pd.to_datetime(date_str),
+            "Close": float(values["4. close"])
+        })
+    df = pd.DataFrame(data).sort_values("Date")
     return df
 
 def enrich_portfolio(df: pd.DataFrame) -> pd.DataFrame:
@@ -70,7 +94,11 @@ def main():
         st.subheader("📰 News & Impact")
         for ticker in df['Ticker']:
             st.markdown(f"### {ticker}")
+            hist_df = get_historical_prices(ticker)
+            if not hist_df.empty:
+              st.line_chart(hist_df.set_index("Date")["Close"], height=200, use_container_width=True)
             news_items = get_news(ticker)
+            st.json(news_items)
             if not news_items:
                 st.write("No recent news found.")
             for item in news_items:
@@ -82,5 +110,4 @@ def main():
 
 if __name__ == '__main__':
     main()
-
 
